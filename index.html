@@ -1,0 +1,351 @@
+import { useState, useEffect } from "react";
+
+// metric: "kg" | "min" | "none"
+const initialData = {
+  lunes: {
+    label: "💪 LUNES — Cuádriceps & Glúteos", color: "blue",
+    sections: [
+      { name: "🔥 Activación previa", exercises: [
+        { name: "Plancha", ref: "2x1min", metric: "min" },
+        { name: "Rotación cadera", ref: "2x10", metric: "none" },
+        { name: "Sentadillas peso corporal", ref: "2x15", metric: "none" },
+        { name: "Patada glúteo banda", ref: "2x15", metric: "none" },
+      ]},
+      { name: "Ejercicios principales", exercises: [
+        { name: "Sentadilla libre profunda", ref: "3x10-8-8", metric: "kg" },
+        { name: "Búlgaras en multipower", ref: "3x10", metric: "kg" },
+        { name: "Hip Thrust libre", ref: "3x10-8-8", metric: "kg" },
+        { name: "Extensión cuádriceps", ref: "3x10-12", metric: "kg" },
+        { name: "Patada glúteo en polea", ref: "3x12", metric: "kg" },
+      ]}
+    ]
+  },
+  martes: {
+    label: "💪 MARTES — Espalda & Bíceps", color: "purple",
+    sections: [
+      { name: "Espalda", exercises: [
+        { name: "Remo con barra", ref: "3x10", metric: "kg" },
+        { name: "Jalón al pecho agarre amplio", ref: "4x10", metric: "kg" },
+        { name: "Remo con mancuerna unilateral", ref: "3x10", metric: "kg" },
+        { name: "Pull Over en polea alta", ref: "4x10", metric: "kg" },
+      ]},
+      { name: "Bíceps", exercises: [
+        { name: "Curl con barra", ref: "3x10", metric: "kg" },
+        { name: "Curl unilateral en banco inclinado", ref: "3x10", metric: "kg" },
+      ]}
+    ]
+  },
+  jueves: {
+    label: "💪 JUEVES — Pectoral, Hombro & Tríceps", color: "rose",
+    sections: [
+      { name: "Pectoral", exercises: [
+        { name: "Press de Banca", ref: "4x10", metric: "kg" },
+        { name: "Aperturas con mancuerna en suelo", ref: "4x10", metric: "kg" },
+      ]},
+      { name: "Hombro", exercises: [
+        { name: "Press de hombro con barra", ref: "3x10", metric: "kg" },
+        { name: "Elevación frontal hombro con barra", ref: "3x10", metric: "kg" },
+        { name: "Elevación lateral unilateral en polea", ref: "3x10", metric: "kg" },
+      ]},
+      { name: "Tríceps", exercises: [
+        { name: "Extensión tríceps cuerda en polea", ref: "4x12", metric: "kg" },
+        { name: "Press francés tumbada con barra", ref: "3x10", metric: "kg" },
+      ]}
+    ]
+  },
+  viernes: {
+    label: "💪 VIERNES — Abdomen & Glúteo", color: "green",
+    sections: [
+      { name: "Abs", exercises: [
+        { name: "Crunch en polea sentada en banco", ref: "3x15", metric: "kg" },
+        { name: "Crunch lateral en polea de pie", ref: "3x15", metric: "kg" },
+        { name: "Elevación de pierna con agarre atrás", ref: "3x15", metric: "none" },
+        { name: "Plancha", ref: "3x1min", metric: "min" },
+      ]},
+      { name: "Glúteo", exercises: [
+        { name: "Patada glúteo en cuadrupedia (smith)", ref: "3x12", metric: "kg" },
+        { name: "Abductor máquina", ref: "4x15", metric: "kg" },
+        { name: "Clamshell con disco o mancuerna", ref: "3x15", metric: "kg" },
+      ]}
+    ]
+  }
+};
+
+const WEEKS = ["S1","S2","S3","S4"];
+const STORAGE_KEY = "gymtracker_v2";
+
+const colorMap = {
+  blue:   { header:"bg-blue-600 text-white", section:"bg-blue-50 text-blue-700", row:"hover:bg-blue-50", badge:"bg-blue-100 text-blue-700", border:"border-blue-200", tab:"bg-blue-600 text-white", tabI:"bg-blue-100 text-blue-700 hover:bg-blue-200", chart:"#3b82f6", weekBgs:["bg-white","bg-blue-100/60","bg-white","bg-blue-100/60"] },
+  purple: { header:"bg-purple-600 text-white", section:"bg-purple-50 text-purple-700", row:"hover:bg-purple-50", badge:"bg-purple-100 text-purple-700", border:"border-purple-200", tab:"bg-purple-600 text-white", tabI:"bg-purple-100 text-purple-700 hover:bg-purple-200", chart:"#9333ea", weekBgs:["bg-white","bg-purple-100/60","bg-white","bg-purple-100/60"] },
+  rose:   { header:"bg-rose-500 text-white", section:"bg-rose-50 text-rose-700", row:"hover:bg-rose-50", badge:"bg-rose-100 text-rose-700", border:"border-rose-200", tab:"bg-rose-500 text-white", tabI:"bg-rose-100 text-rose-700 hover:bg-rose-200", chart:"#f43f5e", weekBgs:["bg-white","bg-rose-100/60","bg-white","bg-rose-100/60"] },
+  green:  { header:"bg-emerald-600 text-white", section:"bg-emerald-50 text-emerald-700", row:"hover:bg-emerald-50", badge:"bg-emerald-100 text-emerald-700", border:"border-emerald-200", tab:"bg-emerald-600 text-white", tabI:"bg-emerald-100 text-emerald-700 hover:bg-emerald-200", chart:"#10b981", weekBgs:["bg-white","bg-emerald-100/60","bg-white","bg-emerald-100/60"] },
+};
+
+function makeKey(day, sec, ex, week, type) { return `${day}__${sec}__${ex}__${week}__${type}`; }
+
+function metricLabel(metric) {
+  if (metric === "kg") return "kg";
+  if (metric === "min") return "min";
+  return null;
+}
+
+// ── Sparkline ──────────────────────────────────────────────────────────────────
+function Sparkline({ points, color }) {
+  if (!points || points.length < 2) return null;
+  const w = 100, h = 36, pad = 5;
+  const xs = points.map((_, i) => pad + (i / (points.length - 1)) * (w - pad * 2));
+  const mn = Math.min(...points), mx = Math.max(...points), rng = mx - mn || 1;
+  const ys = points.map(v => h - pad - ((v - mn) / rng) * (h - pad * 2));
+  return (
+    <svg width={w} height={h}>
+      <polyline points={xs.map((x,i) => `${x},${ys[i]}`).join(" ")} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round"/>
+      {xs.map((x,i) => <circle key={i} cx={x} cy={ys[i]} r="3" fill={color}/>)}
+    </svg>
+  );
+}
+
+// ── Evolution Tab ──────────────────────────────────────────────────────────────
+function EvolutionTab({ cells }) {
+  const allExercises = [];
+  Object.entries(initialData).forEach(([dayKey, day]) => {
+    const c = colorMap[day.color];
+    day.sections.forEach(sec => {
+      sec.exercises.forEach(ex => {
+        const types = ex.metric === "none" ? ["series"] : ["series", ex.metric];
+        types.forEach(type => {
+          const pts = WEEKS.map(w => {
+            const v = cells[makeKey(dayKey, sec.name, ex.name, w, type)] || "";
+            if (!v.trim()) return null;
+            const num = parseFloat(v.replace(",", "."));
+            return isNaN(num) ? null : num;
+          });
+          const valid = pts.filter(v => v !== null);
+          if (!valid.length) return;
+          const trend = valid.length > 1 ? valid[valid.length-1] - valid[0] : 0;
+          allExercises.push({ dayLabel: day.label, ex, type, pts, valid, trend, c });
+        });
+      });
+    });
+  });
+
+  if (!allExercises.length) return (
+    <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+      <div className="text-5xl mb-3">📊</div>
+      <p className="font-semibold">Aún no hay datos registrados</p>
+      <p className="text-sm mt-1">Rellena series y pesos para ver la evolución aquí</p>
+    </div>
+  );
+
+  // Agrupar por día
+  const byDay = {};
+  allExercises.forEach(r => {
+    const key = r.dayLabel;
+    if (!byDay[key]) byDay[key] = { c: r.c, exercises: [] };
+    byDay[key].exercises.push(r);
+  });
+
+  return (
+    <div className="p-4 space-y-6">
+      {Object.entries(byDay).map(([dayLabel, { c: dc, exercises }]) => (
+        <div key={dayLabel}>
+          <div className={`${dc.header} px-4 py-2 rounded-xl mb-3`}>
+            <h3 className="font-bold text-sm">{dayLabel}</h3>
+          </div>
+          <div className="space-y-2">
+            {exercises.map((r, i) => (
+              <div key={i} className={`bg-white rounded-xl border ${r.c.border} p-4 flex items-center gap-4`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${r.type === "series" ? "bg-gray-100 text-gray-500" : r.c.badge}`}>
+                      {r.type === "series" ? "Series" : r.type === "kg" ? "Peso (kg)" : "Tiempo (min)"}
+                    </span>
+                  </div>
+                  <div className="font-semibold text-gray-800 text-sm truncate">{r.ex.name}</div>
+                  <div className="flex gap-3 mt-1.5">
+                    {WEEKS.map((w, wi) => (
+                      <div key={w} className="text-center">
+                        <div className="text-xs text-gray-400">{w}</div>
+                        <div className={`text-xs font-bold ${r.pts[wi] !== null ? r.c.badge.split(" ")[1] : "text-gray-300"}`}>
+                          {r.pts[wi] !== null ? `${r.pts[wi]}${r.type !== "series" ? r.type : ""}` : "—"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <Sparkline points={r.valid} color={r.c.chart}/>
+                  <span className={`text-xs font-bold ${r.trend > 0 ? "text-emerald-600" : r.trend < 0 ? "text-rose-500" : "text-gray-400"}`}>
+                    {r.trend > 0 ? `▲ +${r.trend}` : r.trend < 0 ? `▼ ${r.trend}` : "= Sin cambio"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Cell Input ─────────────────────────────────────────────────────────────────
+function CellInput({ ck, val, placeholder, editing, setEditing, onChange, c }) {
+  if (editing === ck) return (
+    <input autoFocus
+      className={`w-full text-center border-2 ${c.border} rounded-lg px-1 py-1.5 text-xs focus:outline-none bg-white`}
+      value={val} placeholder={placeholder}
+      onChange={e => onChange(e.target.value)}
+      onBlur={() => setEditing(null)}
+      onKeyDown={e => e.key === "Enter" && setEditing(null)}
+    />
+  );
+  return (
+    <button onClick={() => setEditing(ck)}
+      className={`w-full min-h-[32px] rounded-lg border-2 border-dashed border-gray-200 px-1 py-1 text-xs transition-all hover:border-gray-400 ${val ? `${c.badge} border-solid font-semibold` : "text-gray-300"}`}>
+      {val || "＋"}
+    </button>
+  );
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────────
+export default function GymTracker() {
+  const [tab, setTab] = useState("lunes");
+  const [cells, setCells] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
+  });
+  const [editing, setEditing] = useState(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cells)); } catch {}
+  }, [cells]);
+
+  const updCell = (day, sec, ex, week, type, val) => {
+    setCells(p => ({ ...p, [makeKey(day, sec, ex, week, type)]: val }));
+  };
+
+  const isEvo = tab === "evolucion";
+  const day = !isEvo ? initialData[tab] : null;
+  const c = day ? colorMap[day.color] : null;
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-3">
+      <div className="max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">🏋️ Mi Gym Tracker</h1>
+            <p className="text-gray-400 text-xs">Datos guardados localmente</p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {Object.entries(initialData).map(([k, v]) => {
+            const tc = colorMap[v.color];
+            return (
+              <button key={k} onClick={() => setTab(k)}
+                className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${tab === k ? tc.tab : tc.tabI}`}>
+                {k.charAt(0).toUpperCase() + k.slice(1)}
+              </button>
+            );
+          })}
+          <button onClick={() => setTab("evolucion")}
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${tab === "evolucion" ? "bg-gray-700 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>
+            📈 Evolución
+          </button>
+        </div>
+
+        {/* Evolution */}
+        {isEvo && (
+          <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
+            <div className="bg-gray-700 text-white px-6 py-4">
+              <h2 className="text-lg font-bold">📈 Evolución por ejercicio</h2>
+            </div>
+            <EvolutionTab cells={cells}/>
+          </div>
+        )}
+
+        {/* Day table */}
+        {!isEvo && day && (
+          <div className={`bg-white rounded-2xl shadow-md border ${c.border} overflow-hidden`}>
+            <div className={`${c.header} px-6 py-4`}>
+              <h2 className="text-lg font-bold">{day.label}</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-gray-500 uppercase text-xs">
+                    <th className="text-left px-4 py-3 w-8">#</th>
+                    <th className="text-left px-4 py-3">Ejercicio</th>
+                    <th className="text-center px-2 py-3 w-16">Ref.</th>
+                                                {WEEKS.map((w, wi) => (
+                      <th key={w} className={`text-center px-1 py-3 ${c.weekBgs[wi]}`} style={{minWidth: 140}}>
+                        <span className={`px-2 py-1 rounded-md font-bold ${c.badge}`}>{w}</span>
+                        <div className="flex gap-1 mt-1 justify-center text-gray-400 font-normal normal-case text-xs">
+                          <span className="w-16 text-center">Series</span>
+                          <span className="w-16 text-center">Peso</span>
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {day.sections.map(sec => (
+                    <>
+                      <tr key={sec.name}>
+                        <td colSpan={3 + WEEKS.length} className={`${c.section} px-4 py-2 font-semibold text-xs uppercase tracking-wide`}>
+                          {sec.name}
+                        </td>
+                      </tr>
+                      {sec.exercises.map((ex, ei) => {
+                        const ml = metricLabel(ex.metric);
+                        return (
+                          <tr key={ex.name} className={`border-t border-gray-100 ${c.row} transition-colors`}>
+                            <td className="px-4 py-2 text-gray-400">{ei+1}</td>
+                            <td className="px-4 py-2 text-gray-800 font-medium text-xs">{ex.name}</td>
+                            <td className="px-2 py-2 text-center text-gray-400 text-xs">{ex.ref}</td>
+                            {WEEKS.map((w, wi) => {
+                              const ckS = makeKey(tab, sec.name, ex.name, w, "series");
+                              const ckM = makeKey(tab, sec.name, ex.name, w, ex.metric);
+                              const valS = cells[ckS] || "";
+                              const valM = cells[ckM] || "";
+                              return (
+                                <td key={w} className={`px-2 py-2 ${c.weekBgs[wi]}`}>
+                                  <div className={`flex gap-1 p-1.5 rounded-xl ${wi > 0 ? "bg-white/60" : ""}`}>
+                                    <div className="w-16">
+                                      <CellInput ck={ckS} val={valS} placeholder="3x10" editing={editing} setEditing={setEditing}
+                                        onChange={v => updCell(tab, sec.name, ex.name, w, "series", v)} c={c}/>
+                                    </div>
+                                    <div className="w-16">
+                                      {ex.metric === "none" ? (
+                                        <div className="w-full min-h-[32px] rounded-lg bg-white/80 border border-gray-100 flex items-center justify-center text-gray-300 text-xs">—</div>
+                                      ) : (
+                                        <div className="relative">
+                                          <CellInput ck={ckM} val={valM} placeholder={ml} editing={editing} setEditing={setEditing}
+                                            onChange={v => updCell(tab, sec.name, ex.name, w, ex.metric, v)} c={c}/>
+                                          {ml && !valM && (
+                                            <span className="absolute right-1.5 bottom-1 text-gray-300 text-xs pointer-events-none">{ml}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 text-xs text-gray-400">
+              💡 Cada semana tiene dos campos: <strong>Series</strong> (ej: 3x10) y <strong>Peso</strong> (ej: 15)
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
