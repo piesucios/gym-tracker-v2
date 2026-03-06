@@ -1,6 +1,46 @@
-import { useState, useEffect } from "react";
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gym Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
 
-// metric: "kg" | "min" | "none"
+const SUPABASE_URL = "https://gwfuuadgewvmkadqoejd.supabase.co";
+const SUPABASE_KEY = "sb_publishable_LKWLpYQEI6TiMna5bk3JHw_sKmtI0UI";
+const TABLE = "gym_cells_v2";
+
+async function dbGetAll() {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?select=cell_key,cell_value`, {
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+  });
+  const rows = await r.json();
+  const obj = {};
+  if (Array.isArray(rows)) rows.forEach(r => { obj[r.cell_key] = r.cell_value; });
+  return obj;
+}
+
+async function dbUpsert(cell_key, cell_value) {
+  await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      "Prefer": "resolution=merge-duplicates"
+    },
+    body: JSON.stringify({ cell_key, cell_value })
+  });
+}
+
 const initialData = {
   lunes: {
     label: "💪 LUNES — Cuádriceps & Glúteos", color: "blue",
@@ -72,7 +112,6 @@ const initialData = {
 };
 
 const WEEKS = ["S1","S2","S3","S4"];
-const STORAGE_KEY = "gymtracker_v2";
 
 const colorMap = {
   blue:   { header:"bg-blue-600 text-white", section:"bg-blue-50 text-blue-700", row:"hover:bg-blue-50", badge:"bg-blue-100 text-blue-700", border:"border-blue-200", tab:"bg-blue-600 text-white", tabI:"bg-blue-100 text-blue-700 hover:bg-blue-200", chart:"#3b82f6", weekBgs:["bg-white","bg-blue-100/60","bg-white","bg-blue-100/60"] },
@@ -82,29 +121,22 @@ const colorMap = {
 };
 
 function makeKey(day, sec, ex, week, type) { return `${day}__${sec}__${ex}__${week}__${type}`; }
+function metricLabel(metric) { if(metric==="kg") return "kg"; if(metric==="min") return "min"; return null; }
 
-function metricLabel(metric) {
-  if (metric === "kg") return "kg";
-  if (metric === "min") return "min";
-  return null;
-}
-
-// ── Sparkline ──────────────────────────────────────────────────────────────────
 function Sparkline({ points, color }) {
   if (!points || points.length < 2) return null;
-  const w = 100, h = 36, pad = 5;
-  const xs = points.map((_, i) => pad + (i / (points.length - 1)) * (w - pad * 2));
-  const mn = Math.min(...points), mx = Math.max(...points), rng = mx - mn || 1;
-  const ys = points.map(v => h - pad - ((v - mn) / rng) * (h - pad * 2));
+  const w=100,h=36,pad=5;
+  const xs=points.map((_,i)=>pad+(i/(points.length-1))*(w-pad*2));
+  const mn=Math.min(...points),mx=Math.max(...points),rng=mx-mn||1;
+  const ys=points.map(v=>h-pad-((v-mn)/rng)*(h-pad*2));
   return (
     <svg width={w} height={h}>
-      <polyline points={xs.map((x,i) => `${x},${ys[i]}`).join(" ")} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round"/>
-      {xs.map((x,i) => <circle key={i} cx={x} cy={ys[i]} r="3" fill={color}/>)}
+      <polyline points={xs.map((x,i)=>`${x},${ys[i]}`).join(" ")} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round"/>
+      {xs.map((x,i)=><circle key={i} cx={x} cy={ys[i]} r="3" fill={color}/>)}
     </svg>
   );
 }
 
-// ── Evolution Tab ──────────────────────────────────────────────────────────────
 function EvolutionTab({ cells }) {
   const allExercises = [];
   Object.entries(initialData).forEach(([dayKey, day]) => {
@@ -136,12 +168,10 @@ function EvolutionTab({ cells }) {
     </div>
   );
 
-  // Agrupar por día
   const byDay = {};
   allExercises.forEach(r => {
-    const key = r.dayLabel;
-    if (!byDay[key]) byDay[key] = { c: r.c, exercises: [] };
-    byDay[key].exercises.push(r);
+    if (!byDay[r.dayLabel]) byDay[r.dayLabel] = { c: r.c, exercises: [] };
+    byDay[r.dayLabel].exercises.push(r);
   });
 
   return (
@@ -156,17 +186,17 @@ function EvolutionTab({ cells }) {
               <div key={i} className={`bg-white rounded-xl border ${r.c.border} p-4 flex items-center gap-4`}>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${r.type === "series" ? "bg-gray-100 text-gray-500" : r.c.badge}`}>
-                      {r.type === "series" ? "Series" : r.type === "kg" ? "Peso (kg)" : "Tiempo (min)"}
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${r.type==="series"?"bg-gray-100 text-gray-500":r.c.badge}`}>
+                      {r.type==="series"?"Series":r.type==="kg"?"Peso (kg)":"Tiempo (min)"}
                     </span>
                   </div>
                   <div className="font-semibold text-gray-800 text-sm truncate">{r.ex.name}</div>
                   <div className="flex gap-3 mt-1.5">
-                    {WEEKS.map((w, wi) => (
+                    {WEEKS.map((w,wi) => (
                       <div key={w} className="text-center">
                         <div className="text-xs text-gray-400">{w}</div>
-                        <div className={`text-xs font-bold ${r.pts[wi] !== null ? r.c.badge.split(" ")[1] : "text-gray-300"}`}>
-                          {r.pts[wi] !== null ? `${r.pts[wi]}${r.type !== "series" ? r.type : ""}` : "—"}
+                        <div className={`text-xs font-bold ${r.pts[wi]!==null?r.c.badge.split(" ")[1]:"text-gray-300"}`}>
+                          {r.pts[wi]!==null?`${r.pts[wi]}${r.type!=="series"?r.type:""}`:"—"}
                         </div>
                       </div>
                     ))}
@@ -174,8 +204,8 @@ function EvolutionTab({ cells }) {
                 </div>
                 <div className="flex flex-col items-center gap-1">
                   <Sparkline points={r.valid} color={r.c.chart}/>
-                  <span className={`text-xs font-bold ${r.trend > 0 ? "text-emerald-600" : r.trend < 0 ? "text-rose-500" : "text-gray-400"}`}>
-                    {r.trend > 0 ? `▲ +${r.trend}` : r.trend < 0 ? `▼ ${r.trend}` : "= Sin cambio"}
+                  <span className={`text-xs font-bold ${r.trend>0?"text-emerald-600":r.trend<0?"text-rose-500":"text-gray-400"}`}>
+                    {r.trend>0?`▲ +${r.trend}`:r.trend<0?`▼ ${r.trend}`:"= Sin cambio"}
                   </span>
                 </div>
               </div>
@@ -187,7 +217,6 @@ function EvolutionTab({ cells }) {
   );
 }
 
-// ── Cell Input ─────────────────────────────────────────────────────────────────
 function CellInput({ ck, val, placeholder, editing, setEditing, onChange, c }) {
   if (editing === ck) return (
     <input autoFocus
@@ -195,31 +224,33 @@ function CellInput({ ck, val, placeholder, editing, setEditing, onChange, c }) {
       value={val} placeholder={placeholder}
       onChange={e => onChange(e.target.value)}
       onBlur={() => setEditing(null)}
-      onKeyDown={e => e.key === "Enter" && setEditing(null)}
+      onKeyDown={e => e.key==="Enter" && setEditing(null)}
     />
   );
   return (
     <button onClick={() => setEditing(ck)}
-      className={`w-full min-h-[32px] rounded-lg border-2 border-dashed border-gray-200 px-1 py-1 text-xs transition-all hover:border-gray-400 ${val ? `${c.badge} border-solid font-semibold` : "text-gray-300"}`}>
-      {val || "＋"}
+      className={`w-full min-h-[32px] rounded-lg border-2 border-dashed border-gray-200 px-1 py-1 text-xs transition-all hover:border-gray-400 ${val?`${c.badge} border-solid font-semibold`:"text-gray-300"}`}>
+      {val||"＋"}
     </button>
   );
 }
 
-// ── Main App ───────────────────────────────────────────────────────────────────
-export default function GymTracker() {
+function App() {
   const [tab, setTab] = useState("lunes");
-  const [cells, setCells] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
-  });
+  const [cells, setCells] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(null);
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cells)); } catch {}
-  }, [cells]);
+    dbGetAll().then(data => { setCells(data); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
 
   const updCell = (day, sec, ex, week, type, val) => {
-    setCells(p => ({ ...p, [makeKey(day, sec, ex, week, type)]: val }));
+    const k = makeKey(day, sec, ex, week, type);
+    setCells(p => ({ ...p, [k]: val }));
+    setSaving(true);
+    dbUpsert(k, val).finally(() => setSaving(false));
   };
 
   const isEvo = tab === "evolucion";
@@ -229,32 +260,29 @@ export default function GymTracker() {
   return (
     <div className="min-h-screen bg-gray-50 p-3">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-xl font-bold text-gray-800">🏋️ Mi Gym Tracker</h1>
-            <p className="text-gray-400 text-xs">Datos guardados localmente</p>
+            <p className="text-gray-400 text-xs">{loading?"⏳ Cargando...":saving?"💾 Guardando...":"✅ Sincronizado en la nube"}</p>
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-2 mb-4 flex-wrap">
-          {Object.entries(initialData).map(([k, v]) => {
+          {Object.entries(initialData).map(([k,v]) => {
             const tc = colorMap[v.color];
             return (
               <button key={k} onClick={() => setTab(k)}
-                className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${tab === k ? tc.tab : tc.tabI}`}>
-                {k.charAt(0).toUpperCase() + k.slice(1)}
+                className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${tab===k?tc.tab:tc.tabI}`}>
+                {k.charAt(0).toUpperCase()+k.slice(1)}
               </button>
             );
           })}
           <button onClick={() => setTab("evolucion")}
-            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${tab === "evolucion" ? "bg-gray-700 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>
+            className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${tab==="evolucion"?"bg-gray-700 text-white":"bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>
             📈 Evolución
           </button>
         </div>
 
-        {/* Evolution */}
         {isEvo && (
           <div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
             <div className="bg-gray-700 text-white px-6 py-4">
@@ -264,7 +292,6 @@ export default function GymTracker() {
           </div>
         )}
 
-        {/* Day table */}
         {!isEvo && day && (
           <div className={`bg-white rounded-2xl shadow-md border ${c.border} overflow-hidden`}>
             <div className={`${c.header} px-6 py-4`}>
@@ -277,8 +304,8 @@ export default function GymTracker() {
                     <th className="text-left px-4 py-3 w-8">#</th>
                     <th className="text-left px-4 py-3">Ejercicio</th>
                     <th className="text-center px-2 py-3 w-16">Ref.</th>
-                                                {WEEKS.map((w, wi) => (
-                      <th key={w} className={`text-center px-1 py-3 ${c.weekBgs[wi]}`} style={{minWidth: 140}}>
+                    {WEEKS.map((w,wi) => (
+                      <th key={w} className={`text-center px-1 py-3 ${c.weekBgs[wi]}`} style={{minWidth:140}}>
                         <span className={`px-2 py-1 rounded-md font-bold ${c.badge}`}>{w}</span>
                         <div className="flex gap-1 mt-1 justify-center text-gray-400 font-normal normal-case text-xs">
                           <span className="w-16 text-center">Series</span>
@@ -290,9 +317,9 @@ export default function GymTracker() {
                 </thead>
                 <tbody>
                   {day.sections.map(sec => (
-                    <>
-                      <tr key={sec.name}>
-                        <td colSpan={3 + WEEKS.length} className={`${c.section} px-4 py-2 font-semibold text-xs uppercase tracking-wide`}>
+                    <React.Fragment key={sec.name}>
+                      <tr>
+                        <td colSpan={3+WEEKS.length} className={`${c.section} px-4 py-2 font-semibold text-xs uppercase tracking-wide`}>
                           {sec.name}
                         </td>
                       </tr>
@@ -303,20 +330,20 @@ export default function GymTracker() {
                             <td className="px-4 py-2 text-gray-400">{ei+1}</td>
                             <td className="px-4 py-2 text-gray-800 font-medium text-xs">{ex.name}</td>
                             <td className="px-2 py-2 text-center text-gray-400 text-xs">{ex.ref}</td>
-                            {WEEKS.map((w, wi) => {
+                            {WEEKS.map((w,wi) => {
                               const ckS = makeKey(tab, sec.name, ex.name, w, "series");
                               const ckM = makeKey(tab, sec.name, ex.name, w, ex.metric);
-                              const valS = cells[ckS] || "";
-                              const valM = cells[ckM] || "";
+                              const valS = cells[ckS]||"";
+                              const valM = cells[ckM]||"";
                               return (
                                 <td key={w} className={`px-2 py-2 ${c.weekBgs[wi]}`}>
-                                  <div className={`flex gap-1 p-1.5 rounded-xl ${wi > 0 ? "bg-white/60" : ""}`}>
+                                  <div className={`flex gap-1 p-1.5 rounded-xl ${wi>0?"bg-white/60":""}`}>
                                     <div className="w-16">
                                       <CellInput ck={ckS} val={valS} placeholder="3x10" editing={editing} setEditing={setEditing}
                                         onChange={v => updCell(tab, sec.name, ex.name, w, "series", v)} c={c}/>
                                     </div>
                                     <div className="w-16">
-                                      {ex.metric === "none" ? (
+                                      {ex.metric==="none" ? (
                                         <div className="w-full min-h-[32px] rounded-lg bg-white/80 border border-gray-100 flex items-center justify-center text-gray-300 text-xs">—</div>
                                       ) : (
                                         <div className="relative">
@@ -335,7 +362,7 @@ export default function GymTracker() {
                           </tr>
                         );
                       })}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
@@ -349,3 +376,8 @@ export default function GymTracker() {
     </div>
   );
 }
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+    </script>
+  </body>
+</html>
